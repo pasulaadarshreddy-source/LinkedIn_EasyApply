@@ -1,23 +1,49 @@
-# LinkedIn Easy Apply Bot — Customized for Analyst & Operations Roles (India)
+# LinkedIn Easy Apply Bot
 
-An automated LinkedIn Easy Apply bot customized for **Data Analyst, Business Analyst, MIS, Operations, and Reporting** roles in India. Built on top of [Auto_job_applier_linkedIn](https://github.com/GodsScion/Auto_job_applier_linkedIn) by GodsScion.
-
----
-
-## What this bot does
-
-- Automatically applies to Easy Apply jobs on LinkedIn
-- Filters jobs by title — only applies to analyst/data/operations/MIS roles, skips Sales, BD, Marketing
-- Answers application questions intelligently using your profile data + Gemini AI
-- Anti-detection: slow clicks, mouse drift, randomized delays
-- Switches from "Past 24 hours" to "Past 1 hour" filter automatically after 15 minutes
-- Skips duplicate applications
+Automates LinkedIn Easy Apply job applications — fills forms, answers questions, and submits — so you can focus on interviews instead of clicking.
 
 ---
 
-## Setup Instructions
+## The Problem It Solves
 
-### 1. Clone the repo
+Applying to 20–30 jobs a day on LinkedIn means repeating the same steps hundreds of times:
+- Open job → Click Easy Apply → Fill name, phone, salary, experience → Answer 5–10 questions → Submit → Repeat
+
+This bot handles that entire loop automatically for every job that matches your criteria.
+
+---
+
+## How It Works
+
+```
+Start bot
+   │
+   ├── Search LinkedIn for your target job titles + location
+   │
+   ├── For each job listing:
+   │     ├── Check job title → skip if it's Sales / BD / Marketing (configurable)
+   │     ├── Open Easy Apply form
+   │     ├── Fill every field from your config (name, phone, salary, resume...)
+   │     ├── Answer yes/no and dropdown questions using built-in logic
+   │     ├── Answer open text questions using Gemini AI
+   │     └── Submit application
+   │
+   └── Log all applications to a CSV file
+```
+
+Anti-detection is built in — random mouse movement, 3-second delays between actions, and an automatic filter switch from "Past 24 hours" to "Past 1 hour" after 15 minutes of running.
+
+---
+
+## Setup
+
+### Requirements
+- Python 3.10 or higher
+- Google Chrome (latest)
+- A LinkedIn account
+- A free Gemini API key — get one at https://aistudio.google.com/app/apikey
+
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/pasulaadarshreddy-source/LinkedIn_EasyApply.git
@@ -30,9 +56,9 @@ cd LinkedIn_EasyApply
 pip install -r requirements.txt
 ```
 
-### 3. Configure your details
+### 3. Create your config files
 
-Copy the three example config files and fill in your own information:
+The repo ships example files with placeholders. Copy and rename them:
 
 ```bash
 cp config/secrets.example.py config/secrets.py
@@ -40,30 +66,33 @@ cp config/personals.example.py config/personals.py
 cp config/questions.example.py config/questions.py
 ```
 
-**`config/secrets.py`** — Your LinkedIn login + Gemini AI key
-- Get a free Gemini API key at https://aistudio.google.com/app/apikey
+Each file has comments explaining every field. Fill in your own values:
 
-**`config/personals.py`** — Your name, phone, city, address
-
-**`config/questions.py`** — Your resume path, LinkedIn URL, salary, skills, cover letter
+| File | What goes in it |
+|---|---|
+| `config/secrets.py` | LinkedIn login credentials + Gemini API key |
+| `config/personals.py` | Name, phone number, city, address |
+| `config/questions.py` | Resume path, LinkedIn URL, expected salary, cover letter, skills summary |
 
 ### 4. Configure your job search
 
-Edit `config/search.py` to set your preferred:
-- Job titles to search
-- Location
-- Experience level
-- Date posted filter
+Open `config/search.py`. The key settings are:
 
-### 5. Run the bot
+```python
+search_terms = ["Data Analyst", "MIS Analyst", "Operations Analyst"]   # what to search
+search_location = "India"                                               # where
+experience_level = ["Entry level"]                                      # filter
+allowed_title_keywords = ["analyst", "data", "mis", "operations"]       # apply to these
+blocked_title_keywords = ["sales", "recruiter", "telecaller"]           # always skip these
+```
+
+### 5. Run
 
 ```bash
 python app.py
 ```
 
-Then open `http://localhost:5000` in your browser to use the control panel.
-
-Or run directly:
+Open `http://localhost:5000` in your browser to use the control panel, or run headlessly:
 
 ```bash
 python runAiBot.py
@@ -71,27 +100,65 @@ python runAiBot.py
 
 ---
 
-## Job roles it applies to
+## Changing the Target Domain
 
-- Data Analyst / Business Analyst / MIS Analyst
-- Operations Analyst / Operations Executive
-- Reporting Analyst / MIS Reporting / MIS Executive
-- Research Analyst / Financial Analyst
-- Data Associate / Data Specialist / Data Entry
+The bot works for any job field. Edit `config/search.py` — no other file needs to change.
+
+**Software Engineering**
+```python
+search_terms = ["Software Engineer", "Backend Developer", "SDE"]
+allowed_title_keywords = ["engineer", "developer", "software", "backend", "frontend", "sde", "devops"]
+```
+
+**Finance & Accounting**
+```python
+search_terms = ["Finance Analyst", "Accountant", "Audit Associate"]
+allowed_title_keywords = ["finance", "financial", "accountant", "audit", "tax", "banking"]
+```
+
+**Marketing**
+```python
+search_terms = ["Marketing Analyst", "Growth Analyst", "Digital Marketing"]
+allowed_title_keywords = ["marketing", "brand", "growth", "content", "seo", "campaign"]
+```
+
+**HR**
+```python
+search_terms = ["HR Analyst", "HR Executive", "Talent Acquisition"]
+allowed_title_keywords = ["hr", "human resources", "talent", "recruitment", "hrbp", "people"]
+```
 
 ---
 
-## Requirements
+## Question Answering Logic
 
-- Python 3.10+
-- Google Chrome installed
-- LinkedIn account
-- Gemini API key (free tier works)
+The bot answers application questions in this order of priority:
+
+1. **Direct match** — if the question matches a known field (salary, notice period, experience), it uses your config value
+2. **Smart Yes/No** — for yes/no questions it applies rules:
+   - Willing to relocate / travel / work shifts → **Yes**
+   - Do you hold CA / CFA / PhD / MBBS → **No**
+   - Previously employed at military / government → **No**
+   - Unknown → **No** (safe default)
+3. **Gemini AI** — for open-ended text questions it generates a contextual answer using your profile
+4. **Context fallback** — if AI is unavailable, it picks the most relevant fallback answer based on question keywords (improvement questions, weakness questions, strength questions, etc.)
 
 ---
 
-## Credits
+## Output
 
-Original project: [GodsScion/Auto_job_applier_linkedIn](https://github.com/GodsScion/Auto_job_applier_linkedIn)
+All applications are logged automatically to:
+```
+all excels/all_applied_applications_history.csv
+all excels/all_failed_applications_history.csv
+```
 
-Customizations by [Adarsh Reddy Pasula](https://www.linkedin.com/in/adarsh-reddy-pasula)
+Each row records the job title, company, location, date applied, and any questions that needed manual review.
+
+---
+
+## Recommended Usage
+
+- Run for **20–25 minutes per day** maximum to stay under LinkedIn's detection threshold
+- Keep `pause_before_submit = True` in `config/questions.py` while testing — it pauses before each submit so you can review
+- Set it to `False` once you're confident in your config for fully automatic operation

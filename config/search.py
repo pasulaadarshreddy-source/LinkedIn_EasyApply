@@ -19,6 +19,8 @@ version:    26.01.20.5.08
 
 # These Sentences are Searched in LinkedIn
 # Enter your search terms inside '[ ]' with quotes ' "searching title" ' for each search followed by comma ', ' Eg: ["Software Engineer", "Software Developer", "Selenium Developer"]
+# What job titles to search on LinkedIn. Add as many as you want.
+# Change these to match your target field — see README for examples.
 search_terms = [
     "Data Analyst", "Business Analyst", "MIS Analyst", "Operations Analyst",
     "Reporting Analyst", "Analytics", "Data Associate",
@@ -72,6 +74,34 @@ job_function = []                  # (dynamic multiple select)
 job_titles = []                    # (dynamic multiple select)
 benefits = []                      # (dynamic multiple select)
 commitments = []                   # (dynamic multiple select)
+
+## >>>>>>>>>>> JOB TITLE FILTER <<<<<<<<<<<
+# Only apply to jobs whose title contains at least one word from this list.
+# Change these to match YOUR target roles. Examples:
+#   Engineering: ["engineer", "developer", "software", "backend", "frontend", "devops"]
+#   Finance:     ["finance", "accountant", "audit", "tax", "banking", "investment"]
+#   Marketing:   ["marketing", "brand", "content", "growth", "seo", "social media"]
+#   HR:          ["hr", "human resources", "talent", "recruiter", "people"]
+allowed_title_keywords = [
+    'analyst', 'analysis', 'analytics', 'data', 'mis', 'reporting',
+    'intelligence', 'insights', 'research', 'operations', 'financial',
+    'business', 'strategy', 'planning', 'metrics', 'visualization',
+    'associate', 'specialist', 'executive', 'coordinator', 'administrator',
+    'data entry', 'entry operator', 'mis executive', 'mis reporting',
+]
+
+# Always skip jobs whose title contains any word from this list.
+# Add anything you never want to apply to.
+blocked_title_keywords = [
+    'sales', 'business development', 'bde', 'bdm', 'bd executive',
+    'marketing executive', 'digital marketing', 'seo', 'sem',
+    'customer success', 'customer service', 'customer support',
+    'telecaller', 'tele caller', 'telesales', 'inside sales',
+    'recruiter', 'talent acquisition', 'hr executive',
+    'relationship manager', 'account manager', 'key account',
+    'field executive', 'field sales', 'pre-sales', 'presales',
+]
+##
 
 under_10_applicants = False        # True or False, Note: True or False are case-sensitive
 in_your_network = False            # True or False, Note: True or False are case-sensitive

@@ -1365,29 +1365,14 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                     
                     if skip: continue
 
-                    # Title filter — only apply to analyst-family roles.
-                    # LinkedIn returns mixed results even with keyword search.
-                    analyst_title_keywords = [
-                        'analyst', 'analysis', 'analytics', 'data', 'mis', 'reporting',
-                        'intelligence', 'insights', 'research', 'operations', 'financial',
-                        'business', 'strategy', 'planning', 'metrics', 'visualization',
-                        'associate', 'specialist', 'executive', 'coordinator', 'administrator',
-                        'data entry', 'entry operator', 'mis executive', 'mis reporting',
-                    ]
-                    non_analyst_title_keywords = [
-                        'sales', 'business development', 'bde', 'bdm', 'bd executive',
-                        'marketing executive', 'digital marketing', 'seo', 'sem',
-                        'customer success', 'customer service', 'customer support',
-                        'telecaller', 'tele caller', 'telesales', 'inside sales',
-                        'recruiter', 'talent acquisition', 'hr executive',
-                        'relationship manager', 'account manager', 'key account',
-                        'field executive', 'field sales', 'pre-sales', 'presales',
-                    ]
+                    # Title filter — reads allowed/blocked lists from config/search.py
+                    # so users can customise for any domain without touching this file.
+                    from config.search import allowed_title_keywords, blocked_title_keywords
                     title_lower = title.lower()
-                    is_non_analyst = any(kw in title_lower for kw in non_analyst_title_keywords)
-                    is_analyst = any(kw in title_lower for kw in analyst_title_keywords)
-                    if is_non_analyst or not is_analyst:
-                        print_lg(f'Skipping "{title}" — not an analyst-family role.')
+                    is_blocked = any(kw in title_lower for kw in blocked_title_keywords)
+                    is_allowed = any(kw in title_lower for kw in allowed_title_keywords)
+                    if is_blocked or not is_allowed:
+                        print_lg(f'Skipping "{title}" — not in allowed job titles.')
                         skip_count += 1
                         continue
 
