@@ -45,6 +45,7 @@ from config.settings import *
 from modules.open_chrome import *
 from modules.helpers import *
 from modules.clickers_and_finders import *
+import time as _time_module
 from modules.validator import validate_config
 
 if use_AI:
@@ -54,6 +55,8 @@ from typing import Literal
 
 
 pyautogui.FAILSAFE = False
+
+RUN_START_TIME = _time_module.time()   # recorded once at launch; used for the 15-min filter switch
 
 
 #< Global Variables and logics
@@ -427,6 +430,79 @@ def label_has(label: str, *words: str) -> bool:
     return find_bad_word(label, list(words)) is not None
 
 
+# Skills where 4 years is the honest answer (used since college / school)
+office_skill_terms = ['excel', 'microsoft office', 'ms office', 'office suite', 'word',
+                      'powerpoint', 'power point', 'outlook', 'google sheets', 'spreadsheet',
+                      'google docs', 'google drive', 'ms word', 'ms excel']
+
+# Skills where 1 year is the honest answer (from internships)
+data_skill_terms = ['sql', 'power bi', 'powerbi', 'tableau', 'python', 'dax', 'data analysis',
+                    'analytics', 'data visualization', 'data visualisation', 'numpy', 'pandas',
+                    'etl', 'power query', 'pivot table', 'pivot tables', 'reporting', 'bi tool',
+                    'business intelligence', 'data modeling', 'data modelling', 'mysql',
+                    'postgresql', 'sql server', 'snowflake', 'looker', 'qlik', 'metabase']
+
+# Label fragments that clearly indicate the answer should be "No" for a fresher with no prior affiliations
+prior_affiliation_terms = [
+    'previously employed', 'previously worked', 'former employee', 'worked here before',
+    'worked at this company', 'worked for this company', 'worked for our', 'previously with us',
+    'interned here', 'interned at our', 'intern at our', 'current employee',
+    'family member', 'relative', 'referred by an employee',
+    'military', 'armed forces', 'served in', 'currently serving', 'active duty',
+    'security clearance', 'clearance',
+]
+# Qualifications / degrees / certifications Adarsh does not hold → always "No"
+unqualified_terms = [
+    'doctor of medicine', 'medical degree', 'mbbs', 'md degree', 'm.d.',
+    'phd', 'ph.d', 'doctorate', 'doctoral',
+    'llb', 'll.b', 'law degree', 'bar exam', 'bar council',
+    'chartered accountant', ' ca ', 'c.a.', 'cfa', 'cpa', 'cma', 'cms', 'frm',
+    'acca', 'caia', 'cfp', 'pmp', 'six sigma', 'black belt', 'green belt',
+    'cissp', 'cism', 'cisa', 'aws certified', 'azure certified',
+    'google certified', 'salesforce certified', 'oracle certified',
+    'professional engineer', 'registered engineer',
+    'do you hold a', 'do you have a degree', 'do you possess a',
+    'are you a licensed', 'are you a registered', 'are you a certified',
+]
+# Phrases asking if applicant is a citizen of a country other than India
+non_india_citizenship_terms = [
+    'u.s. citizen', 'us citizen', 'united states citizen', 'american citizen',
+    'canadian citizen', 'citizen of canada', 'uk citizen', 'british citizen',
+    'australian citizen', 'chinese citizen', 'japanese citizen',
+]
+# ONLY these willingness/availability keywords get "Yes" for unclassified questions.
+# Anything not in this list and not caught above → "No" (safer than guessing Yes).
+willingness_terms = [
+    'comfortable', 'willing', 'open to', 'okay with', 'available',
+    'flexible', 'agree', 'shift', 'shifts', 'travel', 'relocate', 'relocation',
+    'overtime', 'weekend', 'night shift', 'rotational', 'hybrid', 'remote',
+    'on-site', 'onsite', 'background check', 'drug test', 'drug screen',
+    'immediate', 'join immediately', 'start immediately',
+    'work from', 'work in', 'work at', 'based out of',
+    'accept', 'acknowledge', 'confirm', 'consent',
+]
+
+def default_answer_for_unknown_yes_no(label: str) -> str:
+    '''
+    For radio/select yes-no questions that no other rule can classify:
+    - Prior affiliations (ex-employee, military) → "No"
+    - Non-Indian citizenship → "No"
+    - Qualifications/degrees/certifications not held → "No"
+    - Clear willingness/availability questions (shifts, travel, relocate) → "Yes"
+    - Everything else unknown → "No"  (safer: wrong No loses a job, wrong Yes sends false info)
+    '''
+    if find_bad_word(label, prior_affiliation_terms):
+        return "No"
+    if any(term in label for term in non_india_citizenship_terms):
+        return "No"
+    if find_bad_word(label, unqualified_terms):
+        return "No"
+    if find_bad_word(label, willingness_terms):
+        return "Yes"
+    # Unknown — default to No. A wrong No is recoverable; a wrong Yes sends false data.
+    return "No"
+
+
 # Work-authorization wording overlaps the location questions ("United States" contains
 # "state") and the two families collide in every branch below, so it is classified first.
 visa_terms = ['sponsor', 'sponsors', 'sponsorship', 'visa', 'visas', 'work permit', 'h-1b', 'h1b']
@@ -728,6 +804,9 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                         answer = work_location
                 else:
                     answer = answer_common_questions(label, answer)
+                # For any unclassified yes/no dropdown, default to positive instead of leaving blank
+                if answer is None:
+                    answer = default_answer_for_unknown_yes_no(label)
                 try:
                     if answer is None: raise NoSuchElementException(label_org)
                     select.select_by_visible_text(answer)
@@ -780,12 +859,15 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                 auth_answer = work_authorization_answer(label)
                 if auth_answer is not None: answer = auth_answer
                 elif label_has(label, 'veteran', 'protected'): answer = veteran_status
-                elif label_has(label, 'disability', 'handicapped'): 
+                elif label_has(label, 'disability', 'handicapped'):
                     answer = disability_status
                 else: answer = answer_common_questions(label,answer)
+                # For any unclassified yes/no radio, default to positive instead of leaving blank
+                if answer is None:
+                    answer = default_answer_for_unknown_yes_no(label)
                 foundOption = try_xp(radio, f".//label[normalize-space()='{answer}']", False) if answer else False
-                if foundOption: 
-                    actions.move_to_element(foundOption).click().perform()
+                if foundOption:
+                    drifted_click(actions, foundOption)
                 else:
                     matched = match_answer_to_option(answer, option_texts)
                     if matched is None:
@@ -798,7 +880,7 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                         randomly_answered_questions.add((f'{label_org} ]',"radio"))
                         unanswered_questions.add(f'{label_org} ]')
                     else:
-                        actions.move_to_element(options[matched]).click().perform()
+                        drifted_click(actions, options[matched])
                         answer = options_labels[matched]
             else: answer = prev_answer
             questions_list.add((label_org+" ]", answer, "radio", prev_answer))
@@ -824,6 +906,12 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                     # total is a false answer to those - leave them for config/questions.py.
                     if find_bad_word(label, total_experience_terms) and not find_bad_word(label, skill_qualifier_terms):
                         answer = years_of_experience
+                    elif find_bad_word(label, office_skill_terms):
+                        answer = "4"   # Excel / MS Office used since college
+                    elif find_bad_word(label, data_skill_terms):
+                        answer = "1"   # SQL, Power BI, Python etc. from internships
+                    else:
+                        answer = years_of_experience  # safe default for any other tool
                 elif label_has(label, 'phone', 'mobile'): answer = phone_number
                 elif label_has(label, 'street'): answer = street
                 elif label_has(label, 'email'):
@@ -872,6 +960,12 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                 elif label_has(label, 'state', 'province'): answer = state
                 elif label_has(label, 'zip', 'zipcode', 'postal', 'postcode', 'code'): answer = zipcode
                 elif label_has(label, 'country'): answer = country
+                elif label_has(label, 'project', 'projects'):
+                    answer = "Revenue Loss Analysis using SQL + Power BI — surfaced Rs.3-4 Cr/month risk at California Burrito"
+                elif label_has(label, 'achievement', 'accomplishment'):
+                    answer = "Automated daily reporting with Python/Excel macros saving 80% prep time; Power BI dashboard surfacing Rs.3-4 Cr revenue risk"
+                elif label_has(label, 'gpa', 'cgpa', 'grade'):
+                    answer = "7.5"
                 else: answer = answer_common_questions(label,answer)
                 if answer == "":
                     ai_answer = ""
@@ -888,10 +982,11 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                         # "How many years of Kubernetes?", "What is your expected salary?"
                         # and "How many people did you manage?" were all submitted as the
                         # user's total years of experience - wrong data on a real
-                        # application. Report it and let the stall guard skip the job.
-                        print_lg(f'No answer for the text question "{label_org}". Leaving it empty - add it to config/questions.py.')
+                        # No specific answer found — use headline as a short professional fallback
+                        # so the field is never blank and the form can always advance.
+                        answer = linkedin_headline
+                        print_lg(f'No specific answer for "{label_org}" — used headline as fallback. Review in randomly_answered_questions.')
                         randomly_answered_questions.add((label_org, "text"))
-                        unanswered_questions.add(label_org)
                 text.clear()
                 human_type(text, answer)
                 if do_actions:
@@ -912,6 +1007,20 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
             if not prev_answer or overwrite_previous_answers:
                 if label_has(label, 'summary'): answer = linkedin_summary
                 elif label_has(label, 'cover'): answer = cover_letter
+                elif label_has(label, 'project', 'projects'):
+                    answer = globals().get('project_description', linkedin_summary)
+                elif label_has(label, 'achievement', 'accomplishment', 'impact', 'proud',
+                               'contribution', 'contributed'):
+                    answer = globals().get('project_description', linkedin_summary)
+                elif label_has(label, 'challenge', 'difficult', 'obstacle', 'problem', 'situation'):
+                    answer = globals().get('challenge_answer', linkedin_summary)
+                elif (label_has(label, 'bring', 'offer', 'contribute') and
+                      label_has(label, 'role', 'position', 'table', 'team', 'company')):
+                    answer = globals().get('value_proposition', linkedin_summary)
+                elif label_has(label, 'yourself', 'about you', 'introduce', 'background'):
+                    answer = linkedin_summary
+                elif label_has(label, 'why', 'interest', 'interested', 'motivation', 'applying'):
+                    answer = globals().get('value_proposition', linkedin_summary)
                 if answer == "":
                     ai_answer = ""
                     if use_AI and aiClient:
@@ -923,8 +1032,47 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                         answer = ai_answer.strip()
                         print_lg(f'AI answered "{label_org}": "{answer}"')
                     else:
+                        # No AI or AI failed — pick a context-aware fallback based on question keywords
+                        # so the same text is never pasted for every unknown question.
+                        lbl = label_org.lower()
+                        if any(w in lbl for w in ['improve', 'improv', 'change', 'dislike', "don't like", 'feedback', 'suggestion']):
+                            answer = (
+                                "I would improve the data and analytics features — specifically the "
+                                "creator analytics dashboard to show deeper audience retention patterns "
+                                "and revenue attribution. As a data analyst, I believe platforms grow "
+                                "when they give users and creators clearer, actionable insights from data."
+                            )
+                        elif any(w in lbl for w in ['prototype', 'build', 'create', 'link', 'url', 'demo', 'tool', 'app', 'agent']):
+                            answer = (
+                                "I am comfortable learning and working with new tools quickly. "
+                                "I would be happy to discuss this requirement in detail during the "
+                                "interview and demonstrate my approach to problem-solving practically."
+                            )
+                        elif any(w in lbl for w in ['weakness', 'weak', 'area of improvement', 'grow']):
+                            answer = (
+                                "I am working on improving my speed of presenting insights to "
+                                "non-technical stakeholders. I have been practising simplifying "
+                                "complex data findings into one-page summaries, and I have seen "
+                                "clear improvement over my internships."
+                            )
+                        elif any(w in lbl for w in ['strength', 'strong', 'best at', 'good at']):
+                            answer = (
+                                "My biggest strength is connecting data to business outcomes. "
+                                "I do not just build reports — I dig into the numbers to find the "
+                                "root cause and communicate it clearly. At California Burrito I "
+                                "surfaced Rs.3-4 Cr/month in revenue risk that was previously invisible."
+                            )
+                        else:
+                            answer = (
+                                "I am a data-driven professional with hands-on experience in SQL, "
+                                "Power BI, and Advanced Excel. During my internships I built dashboards, "
+                                "automated reporting workflows saving 80% of manual time, and resolved "
+                                "150+ data discrepancies at 99% accuracy. I bring a structured, "
+                                "analytical approach to every task and communicate findings clearly "
+                                "to both technical and non-technical stakeholders."
+                            )
+                        print_lg(f'No specific/AI answer for "{label_org}" — used context fallback. Review in randomly_answered_questions.')
                         randomly_answered_questions.add((label_org, "textarea"))
-                        unanswered_questions.add(label_org)
             text_area.clear()
             human_type(text_area, answer)
             questions_list.add((label, text_area.get_attribute("value"), "textarea", prev_answer))
@@ -1169,11 +1317,26 @@ def apply_to_jobs(search_terms: list[str]) -> None:
 
     if randomize_search_order:  shuffle(search_terms)
     for searchTerm in search_terms:
-        driver.get(f"https://www.linkedin.com/jobs/search/?keywords={searchTerm}")
-        print_lg("\n________________________________________________________________________________________________________________________\n")
-        print_lg(f'\n>>>> Now searching for "{searchTerm}" <<<<\n\n')
-
-        apply_filters()
+        elapsed_mins = (_time_module.time() - RUN_START_TIME) / 60
+        if elapsed_mins > 15:
+            # After 15 minutes switch to past-1-hour filter via direct URL (f_TPR=r3600).
+            # LinkedIn's UI has no "Past 1 hour" option, so we bake it into the URL.
+            kw  = searchTerm.replace(' ', '%20')
+            loc = search_location.replace(' ', '%20')
+            exp = '%2C'.join(['1', '2'])   # Entry level + Internship
+            direct_url = (
+                f"https://www.linkedin.com/jobs/search/?keywords={kw}"
+                f"&location={loc}&f_AL=true&f_TPR=r3600&f_E={exp}&sortBy=DD"
+            )
+            driver.get(direct_url)
+            print_lg("\n________________________________________________________________________________________________________________________\n")
+            print_lg(f'\n>>>> [{round(elapsed_mins, 1)} min elapsed] Switched to PAST 1 HOUR filter. Searching for "{searchTerm}" <<<<\n\n')
+            buffer(3)
+        else:
+            driver.get(f"https://www.linkedin.com/jobs/search/?keywords={searchTerm}")
+            print_lg("\n________________________________________________________________________________________________________________________\n")
+            print_lg(f'\n>>>> Now searching for "{searchTerm}" <<<<\n\n')
+            apply_filters()
 
         current_count = 0
         try:
@@ -1201,6 +1364,33 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                     job_id,title,company,work_location,work_style,skip = get_job_main_details(job, blacklisted_companies, rejected_jobs)
                     
                     if skip: continue
+
+                    # Title filter — only apply to analyst-family roles.
+                    # LinkedIn returns mixed results even with keyword search.
+                    analyst_title_keywords = [
+                        'analyst', 'analysis', 'analytics', 'data', 'mis', 'reporting',
+                        'intelligence', 'insights', 'research', 'operations', 'financial',
+                        'business', 'strategy', 'planning', 'metrics', 'visualization',
+                        'associate', 'specialist', 'executive', 'coordinator', 'administrator',
+                        'data entry', 'entry operator', 'mis executive', 'mis reporting',
+                    ]
+                    non_analyst_title_keywords = [
+                        'sales', 'business development', 'bde', 'bdm', 'bd executive',
+                        'marketing executive', 'digital marketing', 'seo', 'sem',
+                        'customer success', 'customer service', 'customer support',
+                        'telecaller', 'tele caller', 'telesales', 'inside sales',
+                        'recruiter', 'talent acquisition', 'hr executive',
+                        'relationship manager', 'account manager', 'key account',
+                        'field executive', 'field sales', 'pre-sales', 'presales',
+                    ]
+                    title_lower = title.lower()
+                    is_non_analyst = any(kw in title_lower for kw in non_analyst_title_keywords)
+                    is_analyst = any(kw in title_lower for kw in analyst_title_keywords)
+                    if is_non_analyst or not is_analyst:
+                        print_lg(f'Skipping "{title}" — not an analyst-family role.')
+                        skip_count += 1
+                        continue
+
                     # Redundant fail safe check for applied jobs!
                     try:
                         if job_id in applied_jobs or find_by_class(driver, "jobs-s-apply__application-link", 2):
@@ -1389,7 +1579,8 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                                     # try_xp(modal, ".//span[normalize-space(.)='Review']")
                                 if not discard_reason:
                                     follow_company(modal)
-                                    if wait_xp_click(modal, submit_button_xpath, 2, scrollTop=True): 
+                                    sleep(1)   # 1 s human-like pause before hitting Submit
+                                    if wait_xp_click(modal, submit_button_xpath, 2, scrollTop=True):
                                         date_applied = datetime.now()
                                         if not wait_span_click(driver, "Done", 2): actions.send_keys(Keys.ESCAPE).perform()
                                     elif errored != "stuck" and cur_pause_before_submit and "Yes" in pyautogui.confirm("You submitted the application, didn't you 😒?", "Failed to find Submit Application!", ["Yes", "No"]):

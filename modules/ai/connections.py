@@ -137,10 +137,26 @@ def create_ai_client() -> Optional[AIClient]:
                 kwargs["base_url"] = base_url
             model = init_chat_model(model_name, model_provider="openai", **kwargs)
 
-        print_lg("---- AI CLIENT READY ----")
-        print_lg(f"Provider: {cfg.ai_provider}   |   Model: {model_name}")
-        print_lg("Change these anytime in ./config/secrets.py")
-        print_lg("-------------------------")
+        # Quick validation ping — catches wrong/expired API keys before the first real question.
+        try:
+            test_resp = model.invoke("Respond with the single word: OK")
+            print_lg("---- AI CLIENT READY ----")
+            print_lg(f"Provider: {cfg.ai_provider}   |   Model: {model_name}")
+            print_lg(f"Test ping succeeded: {_msg_text(test_resp)[:60]}")
+            print_lg("Change these anytime in ./config/secrets.py")
+            print_lg("-------------------------")
+        except Exception as ping_err:
+            print_lg("="*60)
+            print_lg("!!! AI KEY VALIDATION FAILED !!!")
+            print_lg(f"Error: {ping_err}")
+            print_lg("")
+            print_lg("Your Gemini API key is invalid or expired.")
+            print_lg("A real Google Gemini key starts with 'AIzaSy'.")
+            print_lg("Get a free key at: https://aistudio.google.com/app/apikey")
+            print_lg("Then update llm_api_key in config/secrets.py")
+            print_lg("="*60)
+            print_lg("Bot will continue WITHOUT AI — generic fallbacks only.")
+            return None
         return AIClient(model)
     except Exception as e:
         _ai_error_alert(

@@ -14,6 +14,8 @@ Support me: https://github.com/sponsors/GodsScion
 version:    26.01.20.5.08
 '''
 
+import random as _random
+
 from config.settings import click_gap, smooth_scroll
 from modules.helpers import buffer, human_type, logger, print_lg, sleep
 from selenium.webdriver.common.by import By
@@ -208,6 +210,26 @@ def company_search_click(driver: WebDriver, actions: ActionChains, companyName: 
     actions.send_keys(Keys.DOWN).perform()
     actions.send_keys(Keys.ENTER).perform()
     print_lg(f'Tried searching and adding "{companyName}"')
+
+def drifted_click(actions: ActionChains, element: WebElement) -> None:
+    '''
+    Moves to `element` with a small random pixel offset so the cursor doesn't land
+    perfectly at the center every time — mimics natural human hand drift.
+    Falls back to a plain click if the offset move fails.
+    '''
+    try:
+        ox = _random.randint(-10, 10)
+        oy = _random.randint(-5, 5)
+        actions.move_to_element_with_offset(element, ox, oy)
+        actions.pause(_random.uniform(0.15, 0.45))
+        actions.move_to_element(element)          # settle on the real target
+        actions.pause(_random.uniform(0.05, 0.2))
+        actions.click()
+        actions.perform()
+    except Exception:
+        try: element.click()
+        except Exception as e: logger.warning("drifted_click fallback also failed: %s", e)
+
 
 def text_input(actions: ActionChains, textInputEle: WebElement | bool, value: str, textFieldName: str = "Text") -> None | Exception:
     if textInputEle:
